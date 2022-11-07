@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"fmt"
 	"hash"
 	"sync/atomic"
 
@@ -96,8 +97,14 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	// We use the STOP instruction whether to see
 	// the jump table was initialised. If it was not
 	// we'll set the default jump table.
+
+	fmt.Println("file: intepreter.go \t func: NewEVMInterpreter, \t  Descr: jump table is set, as a default frontierInstructionSet is going to be choosen. \n jump table is :")
+
 	if cfg.JumpTable[STOP] == nil {
 		var jt JumpTable
+
+		fmt.Println(jt)
+
 		switch {
 		case evm.chainRules.IsYoloV1:
 			jt = yoloV1InstructionSet
@@ -126,6 +133,10 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 		cfg.JumpTable = jt
 	}
 
+	fmt.Println("file: intepreter.go \t func: NewEVMInterpreter, \t  Descr: the field of evm and cfg are as below:")
+
+	fmt.Println(evm)
+	fmt.Println(cfg)
 	return &EVMInterpreter{
 		evm: evm,
 		cfg: cfg,
@@ -140,7 +151,11 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 // ErrExecutionReverted which means revert-and-keep-gas-left.
 func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (ret []byte, err error) {
 
+	fmt.Println("file: intepreter.go \t func: Run, \t  Descr: Run loops and evaluates the contract's code with the given input data and returns the return byte-slice and an error if one occurred. current evm depth value is below:")
+
+	fmt.Println(in.evm.depth)
 	// Increment the call depth which is restricted to 1024
+
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
 
@@ -151,9 +166,15 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		defer func() { in.readOnly = false }()
 	}
 
+	fmt.Println("file: intepreter.go \t func: Run, \t  Descr: return data of previous call is given below in.returndata variable. Here this value is set to null thereafter so that not to preserve old buffer, return data is: ")
+	fmt.Println(in.returnData)
+
 	// Reset the previous call's return data. It's unimportant to preserve the old buffer
 	// as every returning call will return new data anyway.
 	in.returnData = nil
+
+	fmt.Println("file: intepreter.go \t func: Run, \t  Descr:  check the contract code length. if no code then return safely with nill. the length is as belw:")
+	fmt.Println(len(contract.Code))
 
 	// Don't bother with the execution if there's no code.
 	if len(contract.Code) == 0 {
@@ -182,12 +203,34 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		logged  bool   // deferred Tracer should ignore already logged steps
 		res     []byte // result of the opcode execution function
 	)
+
+	fmt.Println("file: intepreter.go \t func: Run, \t  Descr: newly created variables are as below:")
+
+	fmt.Println("op")
+	fmt.Println(op)
+
+	fmt.Println("mem")
+	fmt.Println(mem)
+
+	fmt.Println("stack")
+	fmt.Println(stack)
+
+	fmt.Println("returns")
+	fmt.Println(returns)
+
+	fmt.Println("callContext")
+	fmt.Println(callContext)
+
 	// Don't move this deferrred function, it's placed before the capturestate-deferred method,
 	// so that it get's executed _after_: the capturestate needs the stacks before
 	// they are returned to the pools
 	defer func() {
+
+		fmt.Println("returning from contract execution, values of returnStack and returnRStack are as below")
+
 		returnStack(stack)
 		returnRStack(returns)
+
 	}()
 	contract.Input = input
 
@@ -208,7 +251,12 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// parent context.
 	steps := 0
 	for {
+
 		steps++
+
+		fmt.Println("steps")
+		fmt.Println(steps)
+
 		if steps%1000 == 0 && atomic.LoadInt32(&in.evm.abort) != 0 {
 			break
 		}
@@ -220,10 +268,25 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(pc)
+
+		fmt.Println("opcode fetched")
+		fmt.Println(op)
+
 		operation := in.cfg.JumpTable[op]
+
+		fmt.Println("operation variable is set with opcode using in.cfg.jumptable. Operation detail is given below")
+		fmt.Println(operation)
+
 		if operation == nil {
 			return nil, &ErrInvalidOpCode{opcode: op}
 		}
+
+		fmt.Println("Stack length is :")
+		fmt.Println(stack.len())
+
+		fmt.Println("minStack")
+		fmt.Println(operation.minStack)
+
 		// Validate stack
 		if sLen := stack.len(); sLen < operation.minStack {
 			return nil, &ErrStackUnderflow{stackLen: sLen, required: operation.minStack}
@@ -283,8 +346,21 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			logged = true
 		}
 
+		fmt.Println("address of pc")
+		fmt.Println(&pc)
+
+		fmt.Println("interpreter context")
+		fmt.Println(in)
+
+		fmt.Println("callContext")
+		fmt.Println(callContext)
+
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
+
+		fmt.Println("execution result is")
+		fmt.Println(res)
+
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
@@ -297,9 +373,18 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		case operation.reverts:
 			return res, ErrExecutionReverted
 		case operation.halts:
+			fmt.Println("halted with result as:")
+			fmt.Println(res)
+
 			return res, nil
 		case !operation.jumps:
+
+			fmt.Println("no jump operation, and pc before and after")
+			fmt.Println(pc)
+
 			pc++
+
+			fmt.Println(pc)
 		}
 	}
 	return nil, nil
@@ -308,5 +393,8 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 // CanRun tells if the contract, passed as an argument, can be
 // run by the current interpreter.
 func (in *EVMInterpreter) CanRun(code []byte) bool {
+
+	fmt.Println("approve for contract to run")
+
 	return true
 }

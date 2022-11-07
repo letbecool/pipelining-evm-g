@@ -17,6 +17,7 @@
 package core
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -36,8 +37,10 @@ The state transitioning model does all the necessary work to work out a valid ne
 3) Create a new state object if the recipient is \0*32
 4) Value transfer
 == If contract creation ==
-  4a) Attempt to run transaction data
-  4b) If valid, use result as code for the new state object
+
+	4a) Attempt to run transaction data
+	4b) If valid, use result as code for the new state object
+
 == end ==
 5) Run Script section
 6) Derive new state root
@@ -142,6 +145,8 @@ func IntrinsicGas(data []byte, contractCreation, isHomestead bool, isEIP2028 boo
 
 // NewStateTransition initialises and returns a new state transition object.
 func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
+	fmt.Println("file : state_transition.go, func: NewStateTransition , Discr: initializes the new state transaction object using evm, msg, and gp, it adds gasPrice, value, data, and state")
+
 	return &StateTransition{
 		gp:       gp,
 		evm:      evm,
@@ -203,13 +208,13 @@ func (st *StateTransition) preCheck() error {
 // TransitionDb will transition the state by applying the current message and
 // returning the evm execution result with following fields.
 //
-// - used gas:
-//      total gas used (including gas being refunded)
-// - returndata:
-//      the returned data from evm
-// - concrete execution error:
-//      various **EVM** error which aborts the execution,
-//      e.g. ErrOutOfGas, ErrExecutionReverted
+//   - used gas:
+//     total gas used (including gas being refunded)
+//   - returndata:
+//     the returned data from evm
+//   - concrete execution error:
+//     various **EVM** error which aborts the execution,
+//     e.g. ErrOutOfGas, ErrExecutionReverted
 //
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
@@ -225,6 +230,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// Check clauses 1-3, buy gas if everything is correct
+
+	fmt.Println("file: state_Transaction.go, func: TransitionDB, Discr: TransitionDb will transition the state by applying the current message. received state transaction object is :")
+	fmt.Println(st)
+
 	if err := st.preCheck(); err != nil {
 		return nil, err
 	}
@@ -254,10 +263,21 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+
+		fmt.Println("Contract creation is done. Return data is :")
+		fmt.Println(ret)
+
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+
+		fmt.Println("Call the funciton call by st.evm.Call(sender, st.to(), st.data, st.gas, st.value) and return data is:")
+		fmt.Println(ret)
+
+		fmt.Println("st.gas")
+		fmt.Println(st.gas)
+
 	}
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))

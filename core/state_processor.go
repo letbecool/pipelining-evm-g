@@ -17,6 +17,9 @@
 package core
 
 import (
+	"fmt"
+	// "io/ioutil"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -67,6 +70,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
 		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
 		if err != nil {
@@ -74,6 +78,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
@@ -86,20 +91,42 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("file: state_processor.go, func: ApplyTransaction, Discr: New EVM context is created using msg, header, bc, author.  \n the contex is as given below vm.context: \n CanTransfer: CanTransfer, \n Transfer: Transfer, \n GetHash: GetHashFn(header, chain),	Origin: msg.From(),Coinbase: beneficiary, BlockNumber: new(big.Int).Set(header.Number), \n Time: new(big.Int).SetUint64(header.Time), \n 	Difficulty:  new(big.Int).Set(header.Difficulty),  \n GasLimit: header.GasLimit, \n GasPrice: new(big.Int).Set(msg.GasPrice()),}")
+
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
+
+	fmt.Println(context)
+
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
+
+	fmt.Println("With the new context now new evm enviroment is set. the input to NewEVM is context, statedb, config, cfg ")
+
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
+
+	fmt.Println("Apply transaction  12 venv start")
+	fmt.Println(vmenv)
+	// fmt.Println(allLogs)
+	fmt.Println("Apply transaction 12 end")
+
 	// Apply the transaction to the current state (included in the env)
 	result, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("Apply transaction  13  result start")
+	fmt.Println(result)
+	// fmt.Println(allLogs)
+	fmt.Println("Apply transaction 13 end")
+
 	// Update the state with pending changes
 	var root []byte
 	if config.IsByzantium(header.Number) {
@@ -124,6 +151,16 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	receipt.BlockHash = statedb.BlockHash()
 	receipt.BlockNumber = header.Number
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	fmt.Println("Apply transaction  13  receipt start")
+	fmt.Println(receipt)
+	// fmt.Println(allLogs)
+	fmt.Println("Apply transaction 13 end")
+
+	fmt.Println("Apply transaction 14 start")
+	fmt.Println(receipt)
+	// fmt.Println(allLogs)
+	fmt.Println("Apply transaction 14 end")
 
 	return receipt, err
 }

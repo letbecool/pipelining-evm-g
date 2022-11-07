@@ -19,6 +19,7 @@ package types
 import (
 	"container/heap"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -242,7 +243,32 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 
 	var err error
 	msg.from, err = Sender(s, tx)
+
+	fmt.Println("file: transaction.go, func: AsMessage, Discr: Message is created as, msg : ")
+
+	fmt.Println("msg.nonce")
+	fmt.Println(msg.nonce)
+
+	fmt.Println("msg.gasLimit")
+	fmt.Println(msg.gasLimit)
+
+	fmt.Println("msg.gasPrice")
+	fmt.Println(msg.gasPrice)
+
+	fmt.Println("to")
+	fmt.Println(msg.to)
+
+	fmt.Println("msg.amount")
+	fmt.Println(msg.amount)
+
+	fmt.Println("msg.data")
+	fmt.Println(msg.data)
+
+	fmt.Println("msg.from just now derived from transaction")
+	fmt.Println(msg.from)
+
 	return msg, err
+
 }
 
 // WithSignature returns a new transaction with the given signature.

@@ -17,6 +17,8 @@
 package vm
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -390,16 +392,21 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx
 // opExtCodeHash returns the code hash of a specified account.
 // There are several cases when the function is called, while we can relay everything
 // to `state.GetCodeHash` function to ensure the correctness.
-//   (1) Caller tries to get the code hash of a normal contract account, state
+//
+//	(1) Caller tries to get the code hash of a normal contract account, state
+//
 // should return the relative code hash and set it as the result.
 //
-//   (2) Caller tries to get the code hash of a non-existent account, state should
+//	(2) Caller tries to get the code hash of a non-existent account, state should
+//
 // return common.Hash{} and zero will be set as the result.
 //
-//   (3) Caller tries to get the code hash for an account without contract code,
+//	(3) Caller tries to get the code hash for an account without contract code,
+//
 // state should return emptyCodeHash(0xc5d246...) as the result.
 //
-//   (4) Caller tries to get the code hash of a precompiled account, the result
+//	(4) Caller tries to get the code hash of a precompiled account, the result
+//
 // should be zero or emptyCodeHash.
 //
 // It is worth noting that in order to avoid unnecessary create and clean,
@@ -408,10 +415,12 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx
 // If the precompile account is not transferred any amount on a private or
 // customized chain, the return value will be zero.
 //
-//   (5) Caller tries to get the code hash for an account which is marked as suicided
+//	(5) Caller tries to get the code hash for an account which is marked as suicided
+//
 // in the current transaction, the code hash of this account should be returned.
 //
-//   (6) Caller tries to get the code hash for an account which is marked as deleted,
+//	(6) Caller tries to get the code hash for an account which is marked as deleted,
+//
 // this account should be regarded as a non-existent account and zero should be returned.
 func opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
 	slot := callContext.stack.peek()
@@ -481,6 +490,9 @@ func opGasLimit(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) (
 }
 
 func opPop(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
+	fmt.Println("opPop at the program counter value :")
+	fmt.Println(pc)
+
 	callContext.stack.pop()
 	return nil, nil
 }
@@ -493,8 +505,12 @@ func opMload(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]b
 }
 
 func opMstore(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
+	fmt.Println("file: core/vm/instruction.go, func : opMstore, Discr: start location and value is given below:")
+
 	// pop value of the stack
 	mStart, val := callContext.stack.pop(), callContext.stack.pop()
+
+	fmt.Println(val)
 	callContext.memory.Set32(mStart.Uint64(), &val)
 	return nil, nil
 }
@@ -580,6 +596,7 @@ func opReturnSub(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) 
 }
 
 func opPc(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
+
 	callContext.stack.push(new(uint256.Int).SetUint64(*pc))
 	return nil, nil
 }
@@ -607,14 +624,32 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]
 	// reuse size int for stackvalue
 	stackvalue := size
 
+	fmt.Println("file: instructions.go, func: opCreate, Discr: Opopcode is called")
 	callContext.contract.UseGas(gas)
 	//TODO: use uint256.Int instead of converting with toBig()
+
+	fmt.Println("gas is deduced")
+
 	var bigVal = big0
 	if !value.IsZero() {
 		bigVal = value.ToBig()
 	}
+	fmt.Println("Create operation is called with interpreter.evm.Create(callContext.contract, input, gas, bigVal)")
 
 	res, addr, returnGas, suberr := interpreter.evm.Create(callContext.contract, input, gas, bigVal)
+
+	fmt.Println("result res:")
+	fmt.Println(res)
+
+	fmt.Println("addr:")
+	fmt.Println(addr)
+
+	fmt.Println("returnGas:")
+	fmt.Println(returnGas)
+
+	fmt.Println("suberr:")
+	fmt.Println(suberr)
+
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -626,8 +661,16 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]
 	} else {
 		stackvalue.SetBytes(addr.Bytes())
 	}
+
+	fmt.Println("push address of stack value as callContext.stack.push(&stackvalue)")
 	callContext.stack.push(&stackvalue)
+
+	fmt.Println(stackvalue)
+
 	callContext.contract.Gas += returnGas
+
+	fmt.Println("returnGas is added and callContext.contract.Gas  after retrun unused gas")
+	fmt.Println(callContext.contract.Gas)
 
 	if suberr == ErrExecutionReverted {
 		return res, nil

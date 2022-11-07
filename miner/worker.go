@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -721,7 +722,39 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
+	fmt.Println(" file : worker.go, func: commitTransaction, Discr: ApplyTransaction further send parameter adding \n \n ")
+
+	fmt.Println("w.chainConfig")
+	fmt.Println(w.chainConfig)
+
+	fmt.Println("w.chain")
+	fmt.Println(w.chain)
+
+	fmt.Println("&coinbase")
+	fmt.Println(&coinbase)
+
+	fmt.Println("w.current.gasPool")
+	fmt.Println(w.current.gasPool)
+
+	fmt.Println("w.current.state")
+	fmt.Println(w.current.state)
+
+	fmt.Println("w.current.header")
+	fmt.Println(w.current.header)
+
+	fmt.Println("tx")
+	fmt.Println(tx)
+
+	fmt.Println("&w.current.header.GasUsed")
+	fmt.Println(&w.current.header.GasUsed)
+
+	fmt.Println("*w.chain.GetVMConfig()")
+	fmt.Println(*w.chain.GetVMConfig())
+
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
+
+	fmt.Println("file : worker.go, func: commit Transaction, Discr: successfully  receipt received. \n Receipt is:  ")
+	fmt.Println(receipt)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -772,6 +805,12 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
+
+		fmt.Println("Transaction is retrieved using txs.Peek(), txs  and tx is below")
+		fmt.Println("txs")
+		fmt.Println(txs)
+		fmt.Println("tx")
+		fmt.Println(tx)
 		if tx == nil {
 			break
 		}
@@ -789,9 +828,26 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			continue
 		}
 		// Start executing the transaction
+
+		fmt.Println(" file: miner/worker.go, func: commitTransactions, Discr: Transaction execution start")
+
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
+		fmt.Println("current worker state is prepared by providing following three fields")
+		fmt.Println("tx.hash")
+		fmt.Println(tx.Hash())
+		fmt.Println("common.Hash")
+		fmt.Println(common.Hash{})
+		fmt.Println("w.current.tcount as a index")
+		fmt.Println(w.current.tcount)
+		fmt.Println("begin comitTransaction with tx and coinbase, and listed as")
+		fmt.Println(tx)
+		fmt.Println(coinbase)
 		logs, err := w.commitTransaction(tx, coinbase)
+
+		fmt.Println(" file : worker.go, func: commitTransactions Logs of result of successful commitTransaction is below")
+		fmt.Println(logs)
+
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
@@ -820,6 +876,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
+
 	}
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {

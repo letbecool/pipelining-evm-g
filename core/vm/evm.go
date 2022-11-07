@@ -18,6 +18,7 @@ package vm
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -61,7 +62,13 @@ func (evm *EVM) precompile(addr common.Address) (PrecompiledContract, bool) {
 // run runs the given contract and takes care of running precompiles with a fallback to the byte code interpreter.
 func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, error) {
 	for _, interpreter := range evm.interpreters {
+
+		fmt.Println("file: evm.go \t func: run, \t  Descr:  for _, interpreter := range evm.interpreters ")
+
 		if interpreter.CanRun(contract.Code) {
+
+			fmt.Println("file: evm.go \t func: run, \t  Descr: if interpreter.CanRun(contract.Code) \t then interpreter.Run(contract, input, readOnly)")
+
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
 				// to its current value upon return.
@@ -69,9 +76,14 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 					evm.interpreter = i
 				}(evm.interpreter)
 				evm.interpreter = interpreter
+
+				fmt.Println("file: evm.go \t func: run, \t  Descr:  if evm.interpreter != interpreter \t then set  evm.interpreter = interpreter ")
+
 			}
+
 			return interpreter.Run(contract, input, readOnly)
 		}
+
 	}
 	return nil, errors.New("no compatible interpreter")
 }
@@ -148,6 +160,10 @@ func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmCon
 		interpreters: make([]Interpreter, 0, 1),
 	}
 
+	fmt.Println("file: evm.go \t func: NewEVM, \t  Descr:  \n context:ctx, \n StateDB:      statedb, \n 	vmConfig:     vmConfig, \n 	chainConfig: chainConfig, \n chainRules:   chainConfig.Rules ctx.BlockNumber, \n interpreters: make([]Interpreter, 0, 1),} \n result is shown below: ")
+
+	fmt.Println(evm)
+
 	if chainConfig.IsEWASM(ctx.BlockNumber) {
 		// to be implemented by EVM-C and Wagon PRs.
 		// if vmConfig.EWASMInterpreter != "" {
@@ -169,6 +185,11 @@ func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmCon
 	evm.interpreters = append(evm.interpreters, NewEVMInterpreter(evm, vmConfig))
 	evm.interpreter = evm.interpreters[0]
 
+	fmt.Println("file: evm.go \t func: NewEVM, \t  Descr: NewEVMIntrepretor as a built in intrepreter is set as a evm interpreter. \n evm is given below : \n ")
+	fmt.Println(evm)
+	fmt.Println("evm.interpreter is  below:")
+	fmt.Println(evm.interpreter)
+
 	return evm
 }
 
@@ -185,6 +206,10 @@ func (evm *EVM) Cancelled() bool {
 
 // Interpreter returns the current interpreter
 func (evm *EVM) Interpreter() Interpreter {
+
+	fmt.Println("file: evm.go \t func: Interpreter, \t  Descr:  return current intepreter. The interpreter information is below ")
+	fmt.Println(evm.interpreter)
+
 	return evm.interpreter
 }
 
@@ -193,9 +218,25 @@ func (evm *EVM) Interpreter() Interpreter {
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
 func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
+
+	fmt.Println("file: evm.go \t func: Call, \t  Descr:  Call executes the contract associated with the addr with the given input as parameters. input are below:")
+	fmt.Println("evm object")
+	fmt.Println(evm)
+	fmt.Println("caller")
+	fmt.Println(caller)
+	fmt.Println("addr")
+	fmt.Println(addr)
+	fmt.Println("input")
+	fmt.Println(input)
+	fmt.Println("gas")
+	fmt.Println(gas)
+	fmt.Println("value")
+	fmt.Println(value)
+
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
+
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
@@ -205,6 +246,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		return nil, gas, ErrInsufficientBalance
 	}
 	snapshot := evm.StateDB.Snapshot()
+	fmt.Println("statedb snapshot is taken. the snapshot is: ")
+	fmt.Println(snapshot)
+
 	p, isPrecompile := evm.precompile(addr)
 
 	if !evm.StateDB.Exist(addr) {
@@ -229,8 +273,13 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	}
 
 	if isPrecompile {
+		fmt.Println("code is precompiled. return result of precompiled contract is: ")
+
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
+		fmt.Println(ret)
 	} else {
+		fmt.Println("contract is not precompiled so need to run again for deploy the contract code")
+
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.
 		code := evm.StateDB.GetCode(addr)
@@ -242,7 +291,17 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			// The depth-check is already done, and precompiles handled above
 			contract := NewContract(caller, AccountRef(addrCopy), value, gas)
 			contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
+
+			fmt.Println(" start of run at:")
+			start := time.Now()
+			fmt.Println(start)
+
 			ret, err = run(evm, contract, input, false)
+
+			end := time.Now()
+			fmt.Println("end of run at:")
+			fmt.Println(end)
+
 			gas = contract.Gas
 		}
 	}
@@ -269,9 +328,25 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
+
+	fmt.Println("file: evm.go \t func: CallCode, \t  Descr:  Call executes the contract associated with the addr with the given input as parameters. input are below:")
+	fmt.Println("evm object")
+	fmt.Println(evm)
+	fmt.Println("caller")
+	fmt.Println(caller)
+	fmt.Println("addr")
+	fmt.Println(addr)
+	fmt.Println("input")
+	fmt.Println(input)
+	fmt.Println("gas")
+	fmt.Println(gas)
+	fmt.Println("value")
+	fmt.Println(value)
+
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
+
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
@@ -285,16 +360,37 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	}
 	var snapshot = evm.StateDB.Snapshot()
 
+	fmt.Println("snapshot of evm statedb. snapshot is below")
+	fmt.Println(snapshot)
+
 	// It is allowed to call precompiles, even via delegatecall
 	if p, isPrecompile := evm.precompile(addr); isPrecompile {
+
+		fmt.Println("code is precompiled. return result of precompiled contract is: ")
+
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
+		fmt.Println(ret)
+
 	} else {
+
+		fmt.Println("contract is not precompiled so need to run again for deploy the contract code")
 		addrCopy := addr
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.
 		contract := NewContract(caller, AccountRef(caller.Address()), value, gas)
 		contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), evm.StateDB.GetCode(addrCopy))
+
+		start := time.Now()
+
+		fmt.Println(" start of run at:")
+		fmt.Println(start)
+
 		ret, err = run(evm, contract, input, false)
+
+		end := time.Now()
+		fmt.Println("end of run at:")
+		fmt.Println(end)
+
 		gas = contract.Gas
 	}
 	if err != nil {
@@ -312,6 +408,20 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
+
+	fmt.Println("file: evm.go \t func: DelegateCall, \t  Descr:  DelegateCall executes the contract associated with the addr with the given input as parameters. input are below:")
+	fmt.Println("evm object")
+	fmt.Println(evm)
+	fmt.Println("caller")
+	fmt.Println(caller)
+	fmt.Println("addr")
+	fmt.Println(addr)
+	fmt.Println("input")
+	fmt.Println(input)
+	fmt.Println("gas")
+	fmt.Println(gas)
+	fmt.Println("no value fild here")
+
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
@@ -323,13 +433,30 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 
 	// It is allowed to call precompiles, even via delegatecall
 	if p, isPrecompile := evm.precompile(addr); isPrecompile {
+
+		fmt.Println("code is precompiled. return result of precompiled contract is: ")
+
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
+		fmt.Println(ret)
 	} else {
+		fmt.Println("contract is not precompiled so need to run again for deploy the contract code")
+
 		addrCopy := addr
 		// Initialise a new contract and make initialise the delegate values
 		contract := NewContract(caller, AccountRef(caller.Address()), nil, gas).AsDelegate()
 		contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), evm.StateDB.GetCode(addrCopy))
+
+		start := time.Now()
+
+		fmt.Println(" start of run at:")
+		fmt.Println(start)
+
 		ret, err = run(evm, contract, input, false)
+
+		end := time.Now()
+		fmt.Println("end of run at:")
+		fmt.Println(end)
+
 		gas = contract.Gas
 	}
 	if err != nil {
@@ -346,6 +473,20 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
 func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
+
+	fmt.Println("file: evm.go \t func: StaticCall, \t  Descr:  DelegateCall executes the contract associated with the addr with the given input as parameters. input are below:")
+	fmt.Println("evm object")
+	fmt.Println(evm)
+	fmt.Println("caller")
+	fmt.Println(caller)
+	fmt.Println("addr")
+	fmt.Println(addr)
+	fmt.Println("input")
+	fmt.Println(input)
+	fmt.Println("gas")
+	fmt.Println(gas)
+	fmt.Println("no value fild here")
+
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
@@ -367,8 +508,15 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	evm.StateDB.AddBalance(addr, big0)
 
 	if p, isPrecompile := evm.precompile(addr); isPrecompile {
+
+		fmt.Println("code is precompiled. return result of precompiled contract is: ")
+
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
+		fmt.Println(ret)
+
 	} else {
+		fmt.Println("contract is not precompiled so need to run again for deploy the contract code")
+
 		// At this point, we use a copy of address. If we don't, the go compiler will
 		// leak the 'contract' to the outer scope, and make allocation for 'contract'
 		// even if the actual execution ends on RunPrecompiled above.
@@ -380,7 +528,18 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		// When an error was returned by the EVM or when setting the creation code
 		// above we revert to the snapshot and consume any gas remaining. Additionally
 		// when we're in Homestead this also counts for code storage gas errors.
+
+		start := time.Now()
+
+		fmt.Println(" start of run at:")
+		fmt.Println(start)
+
 		ret, err = run(evm, contract, input, true)
+
+		end := time.Now()
+		fmt.Println("end of run at:")
+		fmt.Println(end)
+
 		gas = contract.Gas
 	}
 	if err != nil {
@@ -408,14 +567,19 @@ func (c *codeAndHash) Hash() common.Hash {
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address) ([]byte, common.Address, uint64, error) {
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
+
+	fmt.Println("file: core/vm/evm.go, func: create, Discr: reate creates a new contract using code as deployment code.	")
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, common.Address{}, gas, ErrDepth
 	}
+
 	if !evm.CanTransfer(evm.StateDB, caller.Address(), value) {
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
 	nonce := evm.StateDB.GetNonce(caller.Address())
 	evm.StateDB.SetNonce(caller.Address(), nonce+1)
+
+	fmt.Println("get the nonce of caller address and set by increment of nonce")
 
 	// Ensure there's no existing contract already at the designated address
 	contractHash := evm.StateDB.GetCodeHash(address)
@@ -423,29 +587,62 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}
 	// Create a new account on the state
+	fmt.Println("snapshot of current evm state DB is:")
+	fmt.Println(evm.StateDB)
+
 	snapshot := evm.StateDB.Snapshot()
 	evm.StateDB.CreateAccount(address)
 	if evm.chainRules.IsEIP158 {
 		evm.StateDB.SetNonce(address, 1)
 	}
+	fmt.Println("create new account on state and set the nonce to 1 and transfer ether")
 	evm.Transfer(evm.StateDB, caller.Address(), address, value)
 
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
+
+	fmt.Println(" initialize a new contract with parameters caller, accountref of address, value, gas as below:")
+
+	fmt.Println("AccountRef (address)")
+	fmt.Println(AccountRef(address))
+
+	fmt.Println("address")
+	fmt.Println(address)
+
+	fmt.Println("caller")
+	fmt.Println(caller)
+	fmt.Println("value")
+	fmt.Println(value)
+
+	fmt.Println("gas")
+	fmt.Println(gas)
+
 	contract := NewContract(caller, AccountRef(address), value, gas)
 	contract.SetCodeOptionalHash(&address, codeAndHash)
+
+	fmt.Println("New  contract enviroment which helps to run evm is: \n type Contract struct {  \n	// CallerAddress is the result of the caller which initialised this \n	// contract. However when the call method is delegated this value  \n		// needs to be initialised to that of the caller's caller. \n		CallerAddress common.Address  \n caller        ContractRef	\n	self          ContractRef \n 	jumpdests map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis. \n 	analysis  bitvec      // Locally cached result of JUMPDEST analysis \n	Code     [] yte \n 	CodeHash common.Hash \n CodeAddr *common.Address \n Input    []byte \n 	Gas   uint64 \n value *big.Int \n 	}")
+
+	fmt.Println(contract)
 
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, address, gas, nil
 	}
+
+	fmt.Println("checked evm.vmConfig.NoRecursion && evm.depth > 0")
 
 	if evm.vmConfig.Debug && evm.depth == 0 {
 		evm.vmConfig.Tracer.CaptureStart(caller.Address(), address, true, codeAndHash.code, gas, value)
 	}
 	start := time.Now()
 
+	fmt.Println(" start of run at:")
+	fmt.Println(start)
+
 	ret, err := run(evm, contract, nil, false)
 
+	end := time.Now()
+	fmt.Println("end of run at:")
+	fmt.Println(end)
 	// check whether the max code size has been exceeded
 	maxCodeSizeExceeded := evm.chainRules.IsEIP158 && len(ret) > params.MaxCodeSize
 	// if the contract creation ran successfully and no errors were returned
@@ -455,6 +652,11 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	if err == nil && !maxCodeSizeExceeded {
 		createDataGas := uint64(len(ret)) * params.CreateDataGas
 		if contract.UseGas(createDataGas) {
+			fmt.Println("file : evm.go, func: create, discr: set code to the given address and provided returned value. addrerss and return bytes arrey values of above run are:")
+
+			fmt.Println(address)
+			fmt.Println(ret)
+
 			evm.StateDB.SetCode(address, ret)
 		} else {
 			err = ErrCodeStoreOutOfGas
