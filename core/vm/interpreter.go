@@ -201,7 +201,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		pcCopy  uint64 // needed for the deferred Tracer
 		gasCopy uint64 // for Tracer to log gas remaining before execution
 		logged  bool   // deferred Tracer should ignore already logged steps
-		res     []byte // result of the opcode execution function
+		//res     []byte // result of the opcode execution function
 	)
 
 	fmt.Println("file: intepreter.go \t func: Run, \t  Descr: newly created variables are as below:")
@@ -267,124 +267,29 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
-		op = contract.GetOp(pc)
 
-		fmt.Println("opcode fetched")
-		fmt.Println(op)
+		//temppc := pc
 
-		operation := in.cfg.JumpTable[op]
+		//fetch and decode operation
 
-		fmt.Println("operation variable is set with opcode using in.cfg.jumptable. Operation detail is given below")
-		fmt.Println(operation)
+		operation, conditionfetch, resfetch, err := fetch(pc, contract, in, callContext, cost, pcCopy, gasCopy, mem, returns, logged)
+		if !conditionfetch {
+			return resfetch, err
 
-		if operation == nil {
-			return nil, &ErrInvalidOpCode{opcode: op}
+		}
+		//execute the operation
+
+		mpc, conditionexec, res, errs := execute(pc, in, callContext, operation)
+
+		if !conditionexec {
+			return res, errs
 		}
 
-		fmt.Println("Stack length is :")
-		fmt.Println(stack.len())
+		pc = mpc
 
-		fmt.Println("minStack")
-		fmt.Println(operation.minStack)
-
-		// Validate stack
-		if sLen := stack.len(); sLen < operation.minStack {
-			return nil, &ErrStackUnderflow{stackLen: sLen, required: operation.minStack}
-		} else if sLen > operation.maxStack {
-			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
-		}
-		// If the operation is valid, enforce and write restrictions
-		if in.readOnly && in.evm.chainRules.IsByzantium {
-			// If the interpreter is operating in readonly mode, make sure no
-			// state-modifying operation is performed. The 3rd stack item
-			// for a call operation is the value. Transferring value from one
-			// account to the others means the state is modified and should also
-			// return with an error.
-			if operation.writes || (op == CALL && stack.Back(2).Sign() != 0) {
-				return nil, ErrWriteProtection
-			}
-		}
-		// Static portion of gas
-		cost = operation.constantGas // For tracing
-		if !contract.UseGas(operation.constantGas) {
-			return nil, ErrOutOfGas
-		}
-
-		var memorySize uint64
-		// calculate the new memory size and expand the memory to fit
-		// the operation
-		// Memory check needs to be done prior to evaluating the dynamic gas portion,
-		// to detect calculation overflows
-		if operation.memorySize != nil {
-			memSize, overflow := operation.memorySize(stack)
-			if overflow {
-				return nil, ErrGasUintOverflow
-			}
-			// memory is expanded in words of 32 bytes. Gas
-			// is also calculated in words.
-			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
-				return nil, ErrGasUintOverflow
-			}
-		}
-		// Dynamic portion of gas
-		// consume the gas and return an error if not enough gas is available.
-		// cost is explicitly set so that the capture state defer method can get the proper cost
-		if operation.dynamicGas != nil {
-			var dynamicCost uint64
-			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
-			cost += dynamicCost // total cost, for debug tracing
-			if err != nil || !contract.UseGas(dynamicCost) {
-				return nil, ErrOutOfGas
-			}
-		}
-		if memorySize > 0 {
-			mem.Resize(memorySize)
-		}
-
-		if in.cfg.Debug {
-			in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, mem, stack, returns, in.returnData, contract, in.evm.depth, err)
-			logged = true
-		}
-
-		fmt.Println("address of pc")
-		fmt.Println(&pc)
-
-		fmt.Println("interpreter context")
-		fmt.Println(in)
-
-		fmt.Println("callContext")
-		fmt.Println(callContext)
-
-		// execute the operation
-		res, err = operation.execute(&pc, in, callContext)
-
-		fmt.Println("execution result is")
-		fmt.Println(res)
-
-		// if the operation clears the return data (e.g. it has returning data)
-		// set the last return to the result of the operation.
-		if operation.returns {
-			in.returnData = common.CopyBytes(res)
-		}
-
-		switch {
-		case err != nil:
-			return nil, err
-		case operation.reverts:
-			return res, ErrExecutionReverted
-		case operation.halts:
-			fmt.Println("halted with result as:")
-			fmt.Println(res)
-
-			return res, nil
-		case !operation.jumps:
-
-			fmt.Println("no jump operation, and pc before and after")
-			fmt.Println(pc)
-
-			pc++
-
-			fmt.Println(pc)
+		if steps == 17 {
+			fmt.Println("steps limit = 100 reached")
+			return nil, nil
 		}
 	}
 	return nil, nil
@@ -394,7 +299,155 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 // run by the current interpreter.
 func (in *EVMInterpreter) CanRun(code []byte) bool {
 
-	fmt.Println("approve for contract to run")
+	fmt.Println("approve for contract to run just setting true")
 
 	return true
+}
+
+func fetch(pc uint64, contract *Contract, in *EVMInterpreter, callContext *callCtx, cost uint64, pcCopy uint64, gasCopy uint64, mem *Memory, returns *ReturnStack, logged bool) (operation *operation, condition bool, ret []byte, errs error) {
+
+	op := contract.GetOp(pc)
+
+	fmt.Println("opcode fetched")
+	fmt.Println(op)
+
+	operation = in.cfg.JumpTable[op]
+
+	fmt.Println("operation variable is set with opcode using in.cfg.jumptable. Operation detail is given below")
+	fmt.Println(operation)
+
+	if operation == nil {
+		return nil, false, nil, &ErrInvalidOpCode{opcode: op}
+	}
+
+	fmt.Println("Stack length is :")
+	fmt.Println(callContext.stack.len())
+
+	fmt.Println("minStack")
+	fmt.Println(operation.minStack)
+
+	// Validate stack
+	if sLen := callContext.stack.len(); sLen < operation.minStack {
+		return nil, false, nil, &ErrStackUnderflow{stackLen: sLen, required: operation.minStack}
+
+	} else if sLen > operation.maxStack {
+
+		return nil, false, nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
+	}
+
+	// If the operation is valid, enforce and write restrictions
+	if in.readOnly && in.evm.chainRules.IsByzantium {
+		// If the interpreter is operating in readonly mode, make sure no
+		// state-modifying operation is performed. The 3rd stack item
+		// for a call operation is the value. Transferring value from one
+		// account to the others means the state is modified and should also
+		// return with an error.
+		if operation.writes || (op == CALL && callContext.stack.Back(2).Sign() != 0) {
+			return nil, false, nil, ErrWriteProtection
+		}
+	}
+	// Static portion of gas
+	cost = operation.constantGas // For tracing
+	if !contract.UseGas(operation.constantGas) {
+		return nil, false, nil, ErrOutOfGas
+	}
+
+	var memorySize uint64
+	// calculate the new memory size and expand the memory to fit
+	// the operation
+	// Memory check needs to be done prior to evaluating the dynamic gas portion,
+	// to detect calculation overflows
+	if operation.memorySize != nil {
+		memSize, overflow := operation.memorySize(callContext.stack)
+		if overflow {
+			return nil, false, nil, ErrGasUintOverflow
+		}
+		// memory is expanded in words of 32 bytes. Gas
+		// is also calculated in words.
+		if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
+			return nil, false, nil, ErrGasUintOverflow
+		}
+	}
+	// Dynamic portion of gas
+	// consume the gas and return an error if not enough gas is available.
+	// cost is explicitly set so that the capture state defer method can get the proper cost
+	var err error
+	if operation.dynamicGas != nil {
+		var dynamicCost uint64
+
+		dynamicCost, err = operation.dynamicGas(in.evm, contract, callContext.stack, mem, memorySize)
+		cost += dynamicCost // total cost, for debug tracing
+		if err != nil || !contract.UseGas(dynamicCost) {
+			return nil, false, nil, ErrOutOfGas
+		}
+	}
+	if memorySize > 0 {
+		mem.Resize(memorySize)
+	}
+
+	if in.cfg.Debug {
+		in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, mem, callContext.stack, returns, in.returnData, contract, in.evm.depth, err)
+		logged = true
+	}
+
+	fmt.Println("address of pc")
+	fmt.Println(&pc)
+
+	fmt.Println("interpreter context")
+	fmt.Println(in)
+
+	fmt.Println("callContext")
+	fmt.Println(callContext)
+
+	//operation variable is now passed to the execute phase
+	return operation, true, nil, nil
+}
+
+func execute(pc uint64, in *EVMInterpreter, callContext *callCtx, operation *operation) (mpc uint64, condition bool, ret []byte, err error) {
+
+	// execute the operation
+	res, err := operation.execute(&pc, in, callContext)
+
+	//end of execute and store
+	if err != nil {
+		fmt.Println("Error on intepreter execute operation")
+		fmt.Println(err)
+	}
+	fmt.Println("execution result is")
+	fmt.Println(res)
+
+	// fmt.Println("execution result is")
+	// fmt.Println(res)
+
+	// if the operation clears the return data (e.g. it has returning data)
+	// set the last return to the result of the operation.
+	if operation.returns {
+		in.returnData = common.CopyBytes(res)
+	}
+
+	switch {
+	case err != nil:
+		return pc, false, nil, err
+	case operation.reverts:
+		return pc, false, res, ErrExecutionReverted
+	case operation.halts:
+		fmt.Println("halted with result as:")
+		fmt.Println(res)
+
+		return pc, false, res, nil
+	case !operation.jumps:
+		fmt.Println("no jump operation, and pc before and after")
+		fmt.Println(pc)
+
+		pc++
+
+		fmt.Println(pc)
+	}
+	modifiedpc := pc
+
+	return modifiedpc, true, res, nil
+
+	//one case is added here for if operation.jumps:
+	//case operation.jumps:
+	// set pc of phase 1 to current  phase 2 jumpdest pc
 }
