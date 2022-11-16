@@ -19,6 +19,7 @@ package vm
 import (
 	"fmt"
 	"hash"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -248,6 +249,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
+
+	fmt.Println("start time of execution")
+	// starttime :=
+	t := time.Now().UnixNano()
+	fmt.Println(t)
 	steps := 0
 
 	mpc := make(chan uint64)
@@ -428,7 +434,12 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		case operation.halts:
 			fmt.Println("halted with result as:")
 			fmt.Println(res)
+			fmt.Println("Total execution time is : ")
+			endtime := time.Now().UnixNano()
+			fmt.Println(endtime)
 
+			fmt.Println("total time diff")
+			fmt.Println(endtime - t)
 			return res, nil
 		case !operation.jumps:
 
